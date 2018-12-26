@@ -1,3 +1,5 @@
+(declaim (optimize (debug 3) (safety 3)))
+
 (defpackage :egison
   (:use :common-lisp
         :optima)
@@ -11,35 +13,36 @@
 
 (in-package :egison)
 
-(defmacro match-all (value matcher &body clauses)
-  `(append ,@(mapcar #'(lambda (clause) (compile-clause-all value matcher clause)) clauses)))
-
-(defun compile-clause-all (value matcher clause)
-  (destructuring-bind (pattern &body body) clause
+(eval-when (:compile-toplevel)
+  (defun compile-clause-all (value matcher clause)
+    (destructuring-bind (pattern &body body) clause
       `(loop :for ret :in (gen-match-results ,pattern ,matcher ,value)
           :collect (destructuring-bind ,(extract-pattern-variables pattern) ret
                      ,@body))))
 
-(defmacro match-first (value matcher &body clauses)
-  (let ((label (gensym)))
-    `(block ,label
-       ,@(mapcar #'(lambda (clause) (compile-clause-first value matcher clause label)) clauses))))
-
-(defun compile-clause-first (value matcher clause label)
-  (destructuring-bind (pattern &body body) clause
+  (defun compile-clause-first (value matcher clause label)
+    (destructuring-bind (pattern &body body) clause
       (let ((tmp (gensym)))
         `(let ((,tmp (gen-match-results ,pattern ,matcher ,value)))
            (when ,tmp
              (destructuring-bind ,(extract-pattern-variables pattern) ,tmp
                (return-from ,label (progn ,@body))))))))
 
-(defun extract-pattern-variables (pattern)
-  (match pattern
-    ((cons 'val _) nil)
-    ((cons _ args) (mapcan #'extract-pattern-variables args))
-    ('_ nil)
-    ((guard x (symbolp x)) (list x))
-    (_ (error "invalid pattern"))))
+  (defun extract-pattern-variables (pattern)
+    (match pattern
+      ((cons 'val _) nil)
+      ((cons _ args) (mapcan #'extract-pattern-variables args))
+      ('_ nil)
+      ((guard x (symbolp x)) (list x))
+      (_ (error "invalid pattern")))))
+
+(defmacro match-all (value matcher &body clauses)
+  `(append ,@(mapcar #'(lambda (clause) (compile-clause-all value matcher clause)) clauses)))
+
+(defmacro match-first (value matcher &body clauses)
+  (let ((label (gensym)))
+    `(block ,label
+       ,@(mapcar #'(lambda (clause) (compile-clause-first value matcher clause label)) clauses))))
 
 (defstruct mstate mstack bind)
 
@@ -52,10 +55,10 @@
   (cond ((and (null mstates) (null stack))
          results)
         ((null mstates)
-         (process-mstates (car stack) (cdr stack results)))
+         (process-mstates (car stack) (cdr stack) results))
         (t (match mstates
              ((cons (mstate- :mstack nil :bind bind) rest)
-              (process-mstates (rest) stack (cons bind results)))
+              (process-mstates rest stack (cons bind results)))
              ((cons mstate rest)
               (process-mstates (process-mstate mstate)
                                (cons rest stack)
@@ -72,7 +75,7 @@
                                 :bind bind))
                next-matomss)))
     ;; _ pattern
-    ((mstate- :mstack (cons (list '_ :Something value) mstack)
+    ((mstate- :mstack (cons (list '_ :Something _) mstack)
               :bind bind)
      (list (make-mstate :mstack mstack :bind bind)))
     ;; pattern variable
@@ -80,7 +83,7 @@
               :bind bind)
      (list (make-mstate :mstack mstack :bind (append bind (list value)))))
     ;; other patterns
-    ((mstate- :mstack (cons (list p matcher value) mstack)
+    ((mstate- :mstack (cons (list pattern matcher value) mstack)
               :bind bind)
      (let ((next-matomss (funcall matcher pattern value)))
        (mapcar #'(lambda (next-matoms)
@@ -88,16 +91,16 @@
                                 :bind bind))
                next-matomss)))))
 
-(defconstant SomethingM :Something)
+(defparameter SomethingM :Something)
 
-(defconstant EqM
+(defparameter EqM
   #'(lambda (pattern value)
       (match pattern
         ((list 'val x) (if (eql x value) (list nil) nil))
         ((guard pvar (symbolp pvar)) (list (list (list pvar SomethingM value))))
         (_ (error "invalid pattern")))))
 
-(defconstant IntegerM EqM)
+(defparameter IntegerM EqM)
 
 (defun unjoin-l (list)
   (append (loop :for x :on list :collect x) '(nil)))
