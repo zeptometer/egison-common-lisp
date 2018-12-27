@@ -9,23 +9,32 @@
            EqM
            IntegerM
            ListM
-           MultisetM))
+           MultisetM
+           _
+           val
+           cons
+           join
+           ;; visible for testing
+           unjoin-l
+           unjoin-r
+           gen-match-results
+           extract-pattern-variables))
 
 (in-package :egison)
 
 (eval-when (:compile-toplevel)
   (defun compile-clause-all (value matcher clause)
     (destructuring-bind (pattern &body body) clause
-      `(loop :for ret :in (gen-match-results ,pattern ,matcher ,value)
-          :collect (destructuring-bind ,(extract-pattern-variables pattern) ret
+      `(loop :for binds :in (gen-match-results ,pattern ,matcher ,value)
+          :collect (destructuring-bind ,(extract-pattern-variables pattern) binds
                      ,@body))))
 
   (defun compile-clause-first (value matcher clause label)
     (destructuring-bind (pattern &body body) clause
-      (let ((tmp (gensym)))
-        `(let ((,tmp (gen-match-results ,pattern ,matcher ,value)))
-           (when ,tmp
-             (destructuring-bind ,(extract-pattern-variables pattern) ,tmp
+      (let ((binds-sym (gensym)))
+        `(let ((,binds-sym (gen-match-results ,pattern ,matcher ,value)))
+           (when ,binds-sym
+             (destructuring-bind ,(extract-pattern-variables pattern) (car ,binds-sym)
                (return-from ,label (progn ,@body))))))))
 
   (defun extract-pattern-variables (pattern)
@@ -33,6 +42,7 @@
       ((cons 'val _) nil)
       ((cons _ args) (mapcan #'extract-pattern-variables args))
       ('_ nil)
+      (nil nil)
       ((guard x (symbolp x)) (list x))
       (_ (error "invalid pattern")))))
 
@@ -67,7 +77,7 @@
 (defun process-mstate (mstate)
   (match mstate
     ;; val pattern
-    ((mstate- :mstack (cons (list (cons 'val f) matcher value) mstack)
+    ((mstate- :mstack (cons (list (list 'val f) matcher value) mstack)
               :bind bind)
      (let ((next-matomss (funcall matcher `(val ,(apply f bind)) value)))
        (mapcar #'(lambda (next-matoms)
@@ -93,19 +103,19 @@
 
 (defparameter SomethingM :Something)
 
-(defparameter EqM
+(defun EqM (eq)
   #'(lambda (pattern value)
       (match pattern
-        ((list 'val x) (if (eql x value) (list nil) nil))
+        ((list 'val x) (if (funcall eq x value) (list nil) nil))
         ((guard pvar (symbolp pvar)) (list (list (list pvar SomethingM value))))
         (_ (error "invalid pattern")))))
 
-(defparameter IntegerM EqM)
+(defparameter IntegerM (EqM #'eql))
 
-(defun unjoin-l (list)
+(defun unjoin-r (list)
   (append (loop :for x :on list :collect x) '(nil)))
 
-(defun unjoin-r (l)
+(defun unjoin-l (l)
   (cons nil
         (loop :for x :in l
            :for xs := (list x) :then (append xs (list x))
@@ -114,10 +124,11 @@
 (defun ListM (matcher)
   #'(lambda (pattern value)
       (match pattern
+        (nil (if (null value) '(nil) nil))
         ((list 'cons pattern-l pattern-r)
          (match value
            ((cons value-l value-r) `(((,pattern-l ,matcher ,value-l)
-                                      (,pattern-r ,matcher ,value-r))))
+                                      (,pattern-r ,(ListM matcher) ,value-r))))
            (_ nil)))
         ((list 'join pattern-l pattern-r)
          (mapcar #'(lambda (value-l value-r) `((,pattern-l ,(ListM matcher) ,value-l)
@@ -136,3 +147,4 @@
                  (match-all value (ListM matcher) ('(join hs (cons x ts)) (cons x (append hs ts)))))         )
         ((guard pvar (symbolp pvar))
          `(((,pvar ,SomethingM ,value)))))))
+
