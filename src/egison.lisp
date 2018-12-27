@@ -1,5 +1,3 @@
-(declaim (optimize (debug 3) (safety 3)))
-
 (defpackage :egison
   (:use :common-lisp
         :optima)
@@ -154,5 +152,3 @@
         ((list 'val x) (if (equal x value) (list nil) nil))
         ((guard pvar (pattern-variable-p pvar))
          `(((,pvar ,SomethingM ,value)))))))
-
-
