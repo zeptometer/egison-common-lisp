@@ -1,0 +1,80 @@
+(defpackage egison.poker
+  (:use :common-lisp
+        :optima
+        :egison)
+  (:export :ModM
+           :SuitM
+           :CardM
+           :card
+           :poker-hand))
+(in-package :egison.poker)
+
+(defun ModM (n)
+  #'(lambda (pattern value)
+      (match pattern
+        ((list 'val x) (if (eql (rem x n) (rem value n)) '(nil) nil))
+        ((guard p (pattern-variable-p p)) `(((,p ,SomethingM ,(rem value n))))))))
+
+(defun SuitM () (EqM #'eq))
+
+(defun CardM ()
+  #'(lambda (pattern value)
+      (match pattern
+        ((list 'card psuit pnum)
+         (match value
+           ((list 'card vsuit vnum) `(((,psuit ,SuitM ,vsuit) (,pnum ,(ModM 13) ,vnum))))))
+        ((guard p (pattern-variable-p p)) `(((,p ,SomethingM ,value)))))))
+
+(defun poker-hand (cs)
+  (match-first cs (MultisetM (CardM))
+    (`(cons (card s n)
+            (cons (card (val ,(lambda (s n) s)) (val ,(lambda (s n) (+ n 1))))
+                  (cons (card (val ,(lambda (s n) s)) (val ,(lambda (s n) (+ n 2))))
+                        (cons (card (val ,(lambda (s n) s)) (val ,(lambda (s n) (+ n 3))))
+                              (cons (card (val ,(lambda (s n) s)) (val ,(lambda (s n) (+ n 4))))
+                                    ())))))
+      "Straight flush")
+    (`(cons (card _ n)
+            (cons (card _ (val ,(lambda (n) n)))
+                  (cons (card _ (val ,(lambda (n) n)))
+                        (cons (card _ (val ,(lambda (n) n)))
+                              _))))
+    "Four of kind")
+    (`(cons (card _ m)
+            (cons (card _ (val ,(lambda (m) m)))
+                  (cons (card _ (val ,(lambda (m) m)))
+                        (cons (card _ n)
+                              (cons (card _ (val ,(lambda (m n) n)))
+                                    ())))))
+    "Full house")
+    (`(cons (card s _)
+            (cons (card (val ,(lambda (s) s)) _)
+                  (cons (card (val ,(lambda (s) s)) _)
+                        (cons (card (val ,(lambda (s) s)) _)
+                              (cons (card (val ,(lambda (s) s)) _)
+                                    ())))))
+    "Flush")
+    (`(cons (card _ n)
+            (cons (card _ (val ,(lambda (n) (+ n 1))))
+                  (cons (card _ (val ,(lambda (n) (+ n 2))))
+                        (cons (card _ (val ,(lambda (n) (+ n 3))))
+                              (cons (card _ (val ,(lambda (n) (+ n 4))))
+                                    ())))))
+    "Straight")
+    (`(cons (card _ n)
+            (cons (card _ (val ,(lambda (n) n)))
+                  (cons (card _ (val ,(lambda (n) n)))
+                        _)))
+    "Three of kind")
+    (`(cons (card _ m)
+            (cons (card _ (val ,(lambda (m) m)))
+                  (cons (card _ n)
+                        (cons (card _ (val ,(lambda (m n) n)))
+                              _))))
+    "Two pair")
+    (`(cons (card _ n)
+            (cons (card _ (val ,(lambda (n) n)))
+                  _))
+    "One pair")
+    (`_
+    "Nothing")))

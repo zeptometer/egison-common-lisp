@@ -3,7 +3,8 @@
 (defpackage :egison
   (:use :common-lisp
         :optima)
-  (:export match-all
+  (:export pattern-variable-p
+           match-all
            match-first
            SomethingM
            EqM
@@ -21,6 +22,10 @@
            extract-pattern-variables))
 
 (in-package :egison)
+
+(defun pattern-variable-p (x)
+  (and (symbolp x)
+       (not (null x))))
 
 (eval-when (:compile-toplevel)
   (defun compile-clause-all (value matcher clause)
@@ -43,7 +48,7 @@
       ((cons _ args) (mapcan #'extract-pattern-variables args))
       ('_ nil)
       (nil nil)
-      ((guard x (symbolp x)) (list x))
+      ((guard x (pattern-variable-p x)) (list x))
       (_ (error "invalid pattern")))))
 
 (defmacro match-all (value matcher &body clauses)
@@ -89,7 +94,7 @@
               :bind bind)
      (list (make-mstate :mstack mstack :bind bind)))
     ;; pattern variable
-    ((mstate- :mstack (cons (list (guard pvar (symbolp pvar)) :Something value) mstack)
+    ((mstate- :mstack (cons (list (guard pvar (pattern-variable-p pvar)) :Something value) mstack)
               :bind bind)
      (list (make-mstate :mstack mstack :bind (append bind (list value)))))
     ;; other patterns
@@ -107,10 +112,10 @@
   #'(lambda (pattern value)
       (match pattern
         ((list 'val x) (if (funcall eq x value) (list nil) nil))
-        ((guard pvar (symbolp pvar)) (list (list (list pvar SomethingM value))))
+        ((guard pvar (pattern-variable-p pvar)) (list (list (list pvar SomethingM value))))
         (_ (error "invalid pattern")))))
 
-(defparameter IntegerM (EqM #'eql))
+(defun IntegerM () (EqM #'eql))
 
 (defun unjoin-r (list)
   (append (loop :for x :on list :collect x) '(nil)))
@@ -135,16 +140,19 @@
                                                (,pattern-r ,(ListM matcher) ,value-r)))
                  (unjoin-l value)
                  (unjoin-r value)))
-        ((list 'val x) (if (eql x value) (list nil) nil))
-        ((guard pvar (symbolp pvar)) `(((,pvar ,SomethingM ,value)))))))
+        ((list 'val x) (if (equal x value) (list nil) nil))
+        ((guard pvar (pattern-variable-p pvar)) `(((,pvar ,SomethingM ,value)))))))
 
 (defun MultisetM (matcher)
   #'(lambda (pattern value)
       (match pattern
+        (nil (if (null value) (list nil) nil))
         ((list 'cons pattern-l pattern-r)
          (mapcar #'(lambda (cell) `((,pattern-l ,matcher ,(car cell))
                                     (,pattern-r ,(MultisetM matcher) ,(cdr cell))))
                  (match-all value (ListM matcher) ('(join hs (cons x ts)) (cons x (append hs ts)))))         )
-        ((guard pvar (symbolp pvar))
+        ((list 'val x) (if (equal x value) (list nil) nil))
+        ((guard pvar (pattern-variable-p pvar))
          `(((,pvar ,SomethingM ,value)))))))
+
 
