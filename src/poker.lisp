@@ -22,7 +22,7 @@
       (match pattern
         ((list 'card psuit pnum)
          (match value
-           ((list 'card vsuit vnum) `(((,psuit ,SuitM ,vsuit) (,pnum ,(ModM 13) ,vnum))))))
+           ((list 'card vsuit vnum) `(((,psuit ,(SuitM) ,vsuit) (,pnum ,(ModM 13) ,vnum))))))
         ((guard p (pattern-variable-p p)) `(((,p ,SomethingM ,value)))))))
 
 (defun poker-hand (cs)

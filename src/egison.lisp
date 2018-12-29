@@ -21,11 +21,11 @@
 
 (in-package :egison)
 
-(defun pattern-variable-p (x)
-  (and (symbolp x)
-       (not (null x))))
+(eval-when (:compile-toplevel :execute)
+  (defun pattern-variable-p (x)
+    (and (symbolp x)
+         (not (null x))))
 
-(eval-when (:compile-toplevel)
   (defun compile-clause-all (value matcher clause)
     (destructuring-bind (pattern &body body) clause
       `(loop :for binds :in (gen-match-results ,pattern ,matcher ,value)
