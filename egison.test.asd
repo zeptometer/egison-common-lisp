@@ -1,5 +1,5 @@
 (asdf:defsystem :egison.test
-  :depends-on (:fiveam :egison)
+  :depends-on (:fiveam :mockingbird :egison)
   :components ((:module "test"
                         :components ((:file "egison")
                                      (:file "poker"))))

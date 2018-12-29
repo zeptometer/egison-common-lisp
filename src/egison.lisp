@@ -17,14 +17,11 @@
            ;; visible for testing
            unjoin-l
            unjoin-r
-           compile-pattern
-           compile-pattern-args
-           gen-match-results
-           extract-pattern-variables))
+           compile-pattern))
 
 (in-package :egison)
 
-(eval-when (:compile-toplevel :execute)
+(eval-when (:compile-toplevel :load-toplevel :execute)
   (defun pattern-variable-p (x)
     (and (symbolp x)
          (not (eq x '_))
@@ -43,7 +40,7 @@
       ('_ (values ''_ vars))
       ((guard x (pattern-variable-p x)) (values `',x (append vars (list x))))
       ((cons 'val body) (let ((tmp (mockable-gensym)))
-                          (values 
+                          (values
                            `(list 'val #'(lambda (,tmp) (destructuring-bind ,vars ,tmp
                                                           (declare (ignorable ,@vars))
                                                           ,@body)))
@@ -57,6 +54,7 @@
       (multiple-value-bind (compiled-pattern vars) (compile-pattern pattern nil)
         `(loop :for binds :in (gen-match-results ,compiled-pattern ,matcher ,value)
             :collect (destructuring-bind ,vars binds
+                       (declare (ignorable ,@vars))
                        ,@body)))))
 
   (defun compile-clause-first (value matcher clause label)
@@ -66,6 +64,7 @@
           `(let ((,binds-sym (gen-match-results ,compiled-pattern ,matcher ,value)))
              (when ,binds-sym
                (destructuring-bind ,vars (car ,binds-sym)
+                 (declare (ignorable ,@vars))
                  (return-from ,label (progn ,@body))))))))))
 
 (defmacro match-all (value matcher &body clauses)
@@ -167,7 +166,7 @@
         ((list 'cons pattern-l pattern-r)
          (mapcar #'(lambda (cell) `((,pattern-l ,matcher ,(car cell))
                                     (,pattern-r ,(MultisetM matcher) ,(cdr cell))))
-                 (match-all value (ListM matcher) ('(join hs (cons x ts)) (cons x (append hs ts)))))         )
+                 (match-all value (ListM matcher) ((join hs (cons x ts)) (cons x (append hs ts))))))
         ((list 'val x) (if (equal x value) (list nil) nil))
         ((guard pvar (pattern-variable-p pvar))
          `(((,pvar ,SomethingM ,value)))))))
