@@ -1,5 +1,6 @@
 (defpackage :egison
   (:use :common-lisp
+        :egison.util
         :optima)
   (:export pattern-variable-p
            match-all
@@ -16,6 +17,8 @@
            ;; visible for testing
            unjoin-l
            unjoin-r
+           compile-pattern
+           compile-pattern-args
            gen-match-results
            extract-pattern-variables))
 
@@ -24,30 +27,46 @@
 (eval-when (:compile-toplevel :execute)
   (defun pattern-variable-p (x)
     (and (symbolp x)
-         (not (null x))))
+         (not (eq x '_))
+         (not (null x))
+         (not (eq x t))))
+
+  (defun compile-pattern-args (args vars compiled-patterns)
+    (if (null args)
+        (values (reverse compiled-patterns) vars)
+        (multiple-value-bind (compiled post-vars) (compile-pattern (car args) vars)
+          (compile-pattern-args (cdr args) post-vars (cons compiled compiled-patterns)))))
+
+  (defun compile-pattern (pattern vars)
+    (match pattern
+      (nil (values nil vars))
+      ('_ (values ''_ vars))
+      ((guard x (pattern-variable-p x)) (values `',x (append vars (list x))))
+      ((cons 'val body) (let ((tmp (mockable-gensym)))
+                          (values 
+                           `(list 'val #'(lambda (,tmp) (destructuring-bind ,vars ,tmp
+                                                          (declare (ignorable ,@vars))
+                                                          ,@body)))
+                           vars)))
+      ((cons destructor args) (multiple-value-bind (compiled-patterns post-vars) (compile-pattern-args args vars nil)
+                                  (values `(list ',destructor ,@compiled-patterns) post-vars)) )
+      (_ (error "invalid pattern"))))
 
   (defun compile-clause-all (value matcher clause)
     (destructuring-bind (pattern &body body) clause
-      `(loop :for binds :in (gen-match-results ,pattern ,matcher ,value)
-          :collect (destructuring-bind ,(extract-pattern-variables pattern) binds
-                     ,@body))))
+      (multiple-value-bind (compiled-pattern vars) (compile-pattern pattern nil)
+        `(loop :for binds :in (gen-match-results ,compiled-pattern ,matcher ,value)
+            :collect (destructuring-bind ,vars binds
+                       ,@body)))))
 
   (defun compile-clause-first (value matcher clause label)
     (destructuring-bind (pattern &body body) clause
-      (let ((binds-sym (gensym)))
-        `(let ((,binds-sym (gen-match-results ,pattern ,matcher ,value)))
-           (when ,binds-sym
-             (destructuring-bind ,(extract-pattern-variables pattern) (car ,binds-sym)
-               (return-from ,label (progn ,@body))))))))
-
-  (defun extract-pattern-variables (pattern)
-    (match pattern
-      ((cons 'val _) nil)
-      ((cons _ args) (mapcan #'extract-pattern-variables args))
-      ('_ nil)
-      (nil nil)
-      ((guard x (pattern-variable-p x)) (list x))
-      (_ (error "invalid pattern")))))
+      (multiple-value-bind (compiled-pattern vars) (compile-pattern pattern nil)
+        (let ((binds-sym (gensym)))
+          `(let ((,binds-sym (gen-match-results ,compiled-pattern ,matcher ,value)))
+             (when ,binds-sym
+               (destructuring-bind ,vars (car ,binds-sym)
+                 (return-from ,label (progn ,@body))))))))))
 
 (defmacro match-all (value matcher &body clauses)
   `(append ,@(mapcar #'(lambda (clause) (compile-clause-all value matcher clause)) clauses)))
@@ -82,13 +101,13 @@
     ;; val pattern
     ((mstate- :mstack (cons (list (list 'val f) matcher value) mstack)
               :bind bind)
-     (let ((next-matomss (funcall matcher `(val ,(apply f bind)) value)))
+     (let ((next-matomss (funcall matcher `(val ,(funcall f bind)) value)))
        (mapcar #'(lambda (next-matoms)
                    (make-mstate :mstack (append next-matoms mstack)
                                 :bind bind))
                next-matomss)))
     ;; _ pattern
-    ((mstate- :mstack (cons (list '_ :Something _) mstack)
+    ((mstate- :mstack (cons (list '_ _ _) mstack)
               :bind bind)
      (list (make-mstate :mstack mstack :bind bind)))
     ;; pattern variable

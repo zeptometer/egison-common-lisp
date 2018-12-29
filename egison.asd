@@ -5,6 +5,8 @@
   :author "Yuito Murase <yuito.murase@gmail.com>"
   :depends-on ("optima")
   :components ((:module "src"
-                        :components ((:file "egison")
+                        :serial t
+                        :components ((:file "util")
+                                     (:file "egison")
                                      (:file "poker"))))
   :in-order-to ((test-op (test-op "egison.test"))))
