@@ -53,14 +53,14 @@
   (is (equal '((1 2 3) (2 3) (3) nil) (unjoin-r '(1 2 3)))))
 
 (test SomethingM
-  (is (equal '(10) (match-all 1 SomethingM (_ 10))))
-  (is (equal '(1) (match-all 1 SomethingM (x x)))))
+  (is (equal '(10) (match-all 1 (SomethingM) (_ 10))))
+  (is (equal '(1) (match-all 1 (SomethingM) (x x)))))
 
 (test EqM/IntegerM
   (is (equal '(10) (match-all 1 (IntegerM) (_ 10))))
   (is (equal '(1) (match-all 1 (IntegerM) (x x))))
-  (is (equal '(1) (match-all 1 (IntegerM) ((val 1) 1))))
-  (is (equal '() (match-all 10 (IntegerM) ((val 1))))))
+  (is (equal '(1) (match-all 1 (IntegerM) ($1 1))))
+  (is (equal '() (match-all 10 (IntegerM) ($1)))))
 
 (test ListM
   (is (equal '((1 (2)))
@@ -68,7 +68,7 @@
                ((cons x y) (list x y)))))
   (is (equal '(1)
              (match-all '(1 2) (ListM (IntegerM))
-               ((cons (val 1) _) 1))))
+               ((cons $1 _) 1))))
   (is (equal '(((1 2) nil) ((1) (2)) (nil (1 2)))
              (match-all '(1 2) (ListM (IntegerM))
                ((join xs ys) (list xs ys)))))
@@ -77,7 +77,7 @@
                ((cons _ (cons _ (cons _ (cons _ (cons x _))))) x))))
   (is (equal '(:success)
              (match-all '(1 2) (ListM (IntegerM))
-               ((val '(1 2)) :success)))))
+               ($'(1 2) :success)))))
 
 (test MultisetM
   (is (equal '(1 2 3)
@@ -97,15 +97,15 @@
                (nil :success))))
   (is (equal '(:success)
              (match-all '(1 2) (MultisetM (IntegerM))
-               ((cons (val 1) (cons (val 2) nil)) :success)))))
+               ((cons $1 (cons $2 nil)) :success)))))
 
 (test pattern-variable
   (is (equal '(:success)
              (match-all '(1 2) (ListM (IntegerM))
-               ((cons x (cons (val (+ 1 x)) nil)) :success))))
+               ((cons x (cons $(+ 1 x) nil)) :success))))
   (is (equal '(:success)
              (match-all '(1 2 3) (ListM (IntegerM))
-               ((cons x (cons y (cons (val (+ x y)) nil))) :success)))))
+               ((cons x (cons y (cons $(+ x y) nil))) :success)))))
 
 (test multiclause
   (is (equal '(1 20)
@@ -116,4 +116,20 @@
 (test match-first
   (is (equal 2
              (match-first '(1 2) (MultisetM (IntegerM))
-               ((cons x (val '(1))) x)))))
+               ((cons x $'(1)) x)))))
+
+(test and-pattern
+  (is (equal '(:success)
+             (match-all '(1 2 3) (MultisetM (IntegerM))
+               ((and (cons $1 _) (cons $2 _)) :success))))
+  (is (equal nil
+             (match-all '(1 2 3) (MultisetM (IntegerM))
+               ((and (cons $4 _) (cons $2 _)) :success)))))
+
+(test or-pattern
+  (is (equal '(:success)
+             (match-all '(1 2 3) (MultisetM (IntegerM))
+               ((or (cons $3 _) (cons $5 _)) :success))))
+  (is (equal nil
+             (match-all '(1 2 3) (MultisetM (IntegerM))
+               ((or (cons $4 _) (cons $5 _)) :success)))))

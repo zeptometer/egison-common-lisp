@@ -106,13 +106,22 @@
                                 :bind bind))
                next-matomss)))
     ;; _ pattern
-    ((mstate- :mstack (cons (list '_ _ _) mstack)
+    ((mstate- :mstack (cons (list '_ :Something _) mstack)
               :bind bind)
      (list (make-mstate :mstack mstack :bind bind)))
     ;; pattern variable
     ((mstate- :mstack (cons (list (guard pvar (pattern-variable-p pvar)) :Something value) mstack)
               :bind bind)
      (list (make-mstate :mstack mstack :bind (append bind (list value)))))
+    ;; and pattern
+    ((mstate- :mstack (cons (list (list 'and pattern-l pattern-r) matcher value) mstack)
+              :bind bind)
+     (list (make-mstate :mstack (cons (list pattern-l matcher value) (cons (list pattern-r matcher value) mstack)) :bind bind)))
+    ;; or pattern
+    ((mstate- :mstack (cons (list (list 'or pattern-l pattern-r) matcher value) mstack)
+              :bind bind)
+     (list (make-mstate :mstack (cons (list pattern-l matcher value) mstack) :bind bind)
+           (make-mstate :mstack (cons (list pattern-r matcher value) mstack) :bind bind)))
     ;; other patterns
     ((mstate- :mstack (cons (list pattern matcher value) mstack)
               :bind bind)
@@ -122,14 +131,13 @@
                                 :bind bind))
                next-matomss)))))
 
-(defparameter SomethingM :Something)
+(defun SomethingM () :Something)
 
 (defun EqM (eq)
   #'(lambda (pattern value)
       (match pattern
         ((list 'val x) (if (funcall eq x value) (list nil) nil))
-        ((guard pvar (pattern-variable-p pvar)) (list (list (list pvar SomethingM value))))
-        (_ (error "invalid pattern")))))
+        (_ `(((,pattern ,(SomethingM) ,value)))))))
 
 (defun IntegerM () (EqM #'eql))
 
@@ -157,7 +165,7 @@
                  (unjoin-l value)
                  (unjoin-r value)))
         ((list 'val x) (if (equal x value) (list nil) nil))
-        ((guard pvar (pattern-variable-p pvar)) `(((,pvar ,SomethingM ,value)))))))
+        (_ `(((,pattern ,(SomethingM) ,value)))))))
 
 (defun MultisetM (matcher)
   #'(lambda (pattern value)
@@ -168,5 +176,8 @@
                                     (,pattern-r ,(MultisetM matcher) ,(cdr cell))))
                  (match-all value (ListM matcher) ((join hs (cons x ts)) (cons x (append hs ts))))))
         ((list 'val x) (if (equal x value) (list nil) nil))
-        ((guard pvar (pattern-variable-p pvar))
-         `(((,pvar ,SomethingM ,value)))))))
+        (_ `(((,pattern ,(SomethingM) ,value)))))))
+
+;;; Reader Macro
+(set-macro-character #\$ #'(lambda (stream char)
+                             (list 'val (read stream))))
