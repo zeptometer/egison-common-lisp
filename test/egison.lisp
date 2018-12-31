@@ -69,7 +69,7 @@
   (is (equal '(1)
              (match-all '(1 2) (ListM (IntegerM))
                ((cons $1 _) 1))))
-  (is (equal '(((1 2) nil) ((1) (2)) (nil (1 2)))
+  (is (equal '((nil (1 2)) ((1) (2)) ((1 2) nil))
              (match-all '(1 2) (ListM (IntegerM))
                ((join xs ys) (list xs ys)))))
   (is (equal '(5)

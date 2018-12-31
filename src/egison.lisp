@@ -3,6 +3,7 @@
         :egison.util
         :optima)
   (:export pattern-variable-p
+           match-lazy
            match-all
            match-first
            SomethingM
@@ -49,51 +50,49 @@
                                   (values `(list ',destructor ,@compiled-patterns) post-vars)) )
       (_ (error "invalid pattern"))))
 
-  (defun compile-clause-all (value matcher clause)
+  (defun compile-clause (value matcher clause)
     (destructuring-bind (pattern &body body) clause
       (multiple-value-bind (compiled-pattern vars) (compile-pattern pattern nil)
-        `(loop :for binds :in (gen-match-results ,compiled-pattern ,matcher ,value)
-            :collect (destructuring-bind ,vars binds
+        (let ((tmp (gensym)))
+          `(lmap #'(lambda (,tmp)
+                     (destructuring-bind ,vars ,tmp
                        (declare (ignorable ,@vars))
-                       ,@body)))))
+                       ,@body))
+                 (gen-match-results ,compiled-pattern ,matcher ,value))))))
 
-  (defun compile-clause-first (value matcher clause label)
-    (destructuring-bind (pattern &body body) clause
-      (multiple-value-bind (compiled-pattern vars) (compile-pattern pattern nil)
-        (let ((binds-sym (gensym)))
-          `(let ((,binds-sym (gen-match-results ,compiled-pattern ,matcher ,value)))
-             (when ,binds-sym
-               (destructuring-bind ,vars (car ,binds-sym)
-                 (declare (ignorable ,@vars))
-                 (return-from ,label (progn ,@body))))))))))
+  (defun compile-clauses (value matcher clauses)
+    (if (null clauses)
+        `(lnil)
+        `(lappend ,(compile-clause value matcher (car clauses))
+                  ,(compile-clauses value matcher (cdr clauses))))))
+
+(defmacro match-lazy (value matcher &body clauses)
+  (compile-clauses value matcher clauses))
 
 (defmacro match-all (value matcher &body clauses)
-  `(append ,@(mapcar #'(lambda (clause) (compile-clause-all value matcher clause)) clauses)))
+  `(ltake -1 (match-lazy ,value ,matcher ,@clauses)))
 
 (defmacro match-first (value matcher &body clauses)
-  (let ((label (gensym)))
-    `(block ,label
-       ,@(mapcar #'(lambda (clause) (compile-clause-first value matcher clause label)) clauses))))
+  `(lcar (match-lazy ,value ,matcher ,@clauses)))
 
 (defstruct mstate mstack bind)
 
 (defun gen-match-results (pattern matcher value)
   (process-mstates (list (make-mstate :mstack (list (list pattern matcher value))
                                       :bind nil))
-                   nil nil))
+                   nil))
 
-(defun process-mstates (mstates stack results)
+(defun process-mstates (mstates stack)
   (cond ((and (null mstates) (null stack))
-         results)
+         (lnil))
         ((null mstates)
-         (process-mstates (car stack) (cdr stack) results))
+         (process-mstates (car stack) (cdr stack)))
         (t (match mstates
              ((cons (mstate- :mstack nil :bind bind) rest)
-              (process-mstates rest stack (cons bind results)))
+              (lcons bind (process-mstates rest stack)))
              ((cons mstate rest)
               (process-mstates (process-mstate mstate)
-                               (cons rest stack)
-                               results))))))
+                               (cons rest stack)))))))
 
 (defun process-mstate (mstate)
   (match mstate
@@ -179,5 +178,5 @@
         (_ `(((,pattern ,(SomethingM) ,value)))))))
 
 ;;; Reader Macro
-(set-macro-character #\$ #'(lambda (stream char)
+(set-macro-character #\$ #'(lambda (stream char) (declare (ignore char))
                              (list 'val (read stream))))
