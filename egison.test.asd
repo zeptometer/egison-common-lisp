@@ -1,7 +1,8 @@
 (asdf:defsystem :egison.test
   :depends-on (:fiveam :mockingbird :egison)
   :components ((:module "test"
-                        :components ((:file "egison")
+                        :components ((:file "util")
+                                     (:file "egison")
                                      (:file "poker"))))
   :perform (asdf:test-op (o s)
                          (uiop:symbol-call :fiveam :run! (uiop:find-symbol* :egison-util-test :egison.util.test))

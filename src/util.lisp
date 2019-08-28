@@ -53,7 +53,7 @@
       (multiple-value-bind (head tail) (force lcell)
         (if (null tail)
             (reverse results)
-            (take (1- n) tail (cons head results))))))
+            (ltake (1- n) tail (cons head results))))))
 
 (defun lmap (func lcell)
   (delay (multiple-value-bind (head tail) (force lcell)
