@@ -15,4 +15,4 @@ egison-common-lisp is not provided by quicklisp currently. You need to [configur
 ## Usage
 TODO: Add document for egison-stype pattern matching (Sorry!)
 
-For now, please read [egison-scheme's README](https://github.com/egison/egison-scheme/blob/master/README.md) for general background and usage. Also read /test directory to see how egison-style pattern match looks like with egison-common-lisp.
+For now, please read [egison-scheme's README](https://github.com/egison/egison-scheme/blob/master/README.md) for general background and usage. Also read `/test` directory to see how egison-style pattern match looks like with egison-common-lisp.
